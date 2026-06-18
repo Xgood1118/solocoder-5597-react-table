@@ -4,6 +4,8 @@ import { SortIndicator } from './SortIndicator';
 import { FilterButton } from './FilterButton';
 import { ColumnResizer } from './ColumnResizer';
 
+const HEADER_HEIGHT = 48;
+
 interface TableHeaderProps<T> {
   columns: ColumnDef<T>[];
   columnWidths: Record<string, number>;
@@ -77,10 +79,15 @@ export function TableHeader<T extends Record<string, any>>({
       <div
         key={col.id}
         className="flex-shrink-0 flex items-center px-3 py-2 border-b border-r border-slate-200 bg-slate-50 font-medium text-slate-700 text-sm select-none relative"
-        style={{ width }}
+        style={{
+          width,
+          height: HEADER_HEIGHT,
+          minHeight: HEADER_HEIGHT,
+          boxSizing: 'border-box',
+        }}
       >
         <div
-          className={`flex items-center gap-1 flex-1 min-w-0 ${isSortable ? 'cursor-pointer hover:text-blue-600' : ''}`}
+          className={`flex items-center gap-1 flex-1 min-w-0 h-full ${isSortable ? 'cursor-pointer hover:text-blue-600' : ''}`}
           onClick={isSortable ? (e) => onSort(col.id, e.shiftKey) : undefined}
         >
           <span className="truncate">{col.title}</span>
@@ -105,7 +112,12 @@ export function TableHeader<T extends Record<string, any>>({
   const renderSelectionCell = () => (
     <div
       className="flex-shrink-0 flex items-center justify-center border-b border-r border-slate-200 bg-slate-50"
-      style={{ width: selectionColumnWidth }}
+      style={{
+        width: selectionColumnWidth,
+        height: HEADER_HEIGHT,
+        minHeight: HEADER_HEIGHT,
+        boxSizing: 'border-box',
+      }}
     >
       <input
         type="checkbox"
@@ -131,33 +143,68 @@ export function TableHeader<T extends Record<string, any>>({
         (innerRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
       }}
       className="flex w-full overflow-hidden border-t border-l border-slate-200 bg-slate-50"
-      style={{ position: 'sticky', top: 0, zIndex: 30 }}
+      style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 40,
+        height: HEADER_HEIGHT,
+        minHeight: HEADER_HEIGHT,
+      }}
     >
-      <div className="flex" style={{ position: 'sticky', left: 0, zIndex: 20 }}>
+      <div
+        className="flex"
+        style={{
+          position: 'sticky',
+          left: 0,
+          zIndex: 45,
+          height: HEADER_HEIGHT,
+          flexShrink: 0,
+          backgroundColor: '#f8fafc',
+          boxShadow:
+            leftFixedCols.length > 0 || enableSelection
+              ? '2px 0 8px -2px rgba(0,0,0,0.08)'
+              : undefined,
+        }}
+      >
         {enableSelection && renderSelectionCell()}
         {leftFixedCols.map(renderCell)}
       </div>
 
-      <div className="flex overflow-hidden" style={{ flex: 1 }}>
+      <div
+        className="flex overflow-hidden"
+        style={{ flex: 1, height: HEADER_HEIGHT, minWidth: 0, position: 'relative' }}
+      >
         <div
           className="flex"
           style={{
             transform: `translateX(-${scrollLeft}px)`,
             width: totalScrollableWidth + leftFixedWidth + rightFixedWidth,
+            height: HEADER_HEIGHT,
+            flexShrink: 0,
           }}
         >
-          <div style={{ width: leftFixedWidth, flexShrink: 0 }} />
+          <div style={{ width: leftFixedWidth, flexShrink: 0, height: HEADER_HEIGHT }} />
           {scrollableCols.map(renderCell)}
-          <div style={{ width: rightFixedWidth, flexShrink: 0 }} />
+          <div style={{ width: rightFixedWidth, flexShrink: 0, height: HEADER_HEIGHT }} />
         </div>
       </div>
 
-      <div
-        className="flex"
-        style={{ position: 'sticky', right: 0, zIndex: 20, flexShrink: 0 }}
-      >
-        {rightFixedCols.map(renderCell)}
-      </div>
+      {rightFixedCols.length > 0 && (
+        <div
+          className="flex"
+          style={{
+            position: 'sticky',
+            right: 0,
+            zIndex: 45,
+            flexShrink: 0,
+            height: HEADER_HEIGHT,
+            backgroundColor: '#f8fafc',
+            boxShadow: '-2px 0 8px -2px rgba(0,0,0,0.08)',
+          }}
+        >
+          {rightFixedCols.map(renderCell)}
+        </div>
+      )}
     </div>
   );
 }

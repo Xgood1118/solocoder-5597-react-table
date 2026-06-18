@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef } from 'react';
 import { ColumnDef } from '../types/table';
 import { format } from 'date-fns';
 
@@ -107,16 +107,10 @@ export function TableBody<T extends Record<string, any>>({
     0
   );
 
-  const visibleCols = scrollableCols.slice(
-    Math.max(0, startColIndex - leftFixedCols.length - (enableSelection ? 1 : 0)),
-    endColIndex - rightFixedCols.length
-  );
-
   const renderRowContent = (
     row: T,
     rowIndex: number,
-    cols: ColumnDef<T>[],
-    _isFixed: 'left' | 'right' | 'scrollable'
+    cols: ColumnDef<T>[]
   ) => {
     return cols.map((col) => {
       const width = columnWidths[col.id] ?? col.width;
@@ -130,10 +124,12 @@ export function TableBody<T extends Record<string, any>>({
           style={{
             width,
             height: '100%',
+            minHeight: 48,
             backgroundColor: isSelected ? '#eff6ff' : undefined,
+            boxSizing: 'border-box',
           }}
         >
-          <div className="truncate w-full">
+          <div className="truncate w-full leading-tight">
             {col.render
               ? col.render(row, rowIndex)
               : formatCellValue(value, col.dataType)}
@@ -150,7 +146,12 @@ export function TableBody<T extends Record<string, any>>({
     return (
       <div
         className="flex-shrink-0 flex items-center justify-center border-b border-r border-slate-200"
-        style={{ width: selectionColumnWidth, height: '100%' }}
+        style={{
+          width: selectionColumnWidth,
+          height: '100%',
+          minHeight: 48,
+          boxSizing: 'border-box',
+        }}
       >
         <input
           type="checkbox"
@@ -172,17 +173,23 @@ export function TableBody<T extends Record<string, any>>({
     const rowId = row[rowIdKey];
     const isSelected = selectedIds.has(rowId);
     const isStriped = striped && rowIndex % 2 === 1;
+    const rowBg = isSelected
+      ? '#eff6ff'
+      : isStriped
+      ? '#f8fafc'
+      : '#ffffff';
 
     return (
       <div
         key={rowId}
         ref={(el) => measureRowHeight(rowIndex, el)}
         data-row-index={rowIndex}
-        className={`absolute left-0 right-0 flex ${isStriped ? 'bg-slate-50' : 'bg-white'} hover:bg-blue-50/40 transition-colors`}
+        className={`absolute left-0 right-0 flex hover:bg-blue-50/40 transition-colors`}
         style={{
           top: rowOffset,
           height: rowHeight,
-          backgroundColor: isSelected ? '#eff6ff' : undefined,
+          backgroundColor: rowBg,
+          zIndex: 1,
         }}
       >
         <div
@@ -190,44 +197,59 @@ export function TableBody<T extends Record<string, any>>({
           style={{
             position: 'sticky',
             left: 0,
-            zIndex: 15,
-            height: '100%',
-            backgroundColor: isSelected ? '#eff6ff' : isStriped ? '#f8fafc' : '#ffffff',
+            zIndex: 25,
+            height: rowHeight,
+            flexShrink: 0,
+            backgroundColor: rowBg,
+            boxShadow: leftFixedCols.length > 0 || enableSelection
+              ? '2px 0 8px -2px rgba(0,0,0,0.08)'
+              : undefined,
           }}
         >
           {enableSelection && renderSelectionCell(row)}
-          {renderRowContent(row, rowIndex, leftFixedCols, 'left')}
+          {renderRowContent(row, rowIndex, leftFixedCols)}
         </div>
 
-        <div className="flex overflow-hidden" style={{ flex: 1, height: '100%' }}>
+        <div
+          className="flex overflow-hidden"
+          style={{
+            flex: 1,
+            height: rowHeight,
+            minWidth: 0,
+            position: 'relative',
+          }}
+        >
           <div
             className="flex"
             style={{
               transform: `translateX(-${scrollLeft}px)`,
               width: totalScrollableWidth + leftFixedWidth + rightFixedWidth,
-              height: '100%',
+              height: rowHeight,
+              flexShrink: 0,
             }}
           >
-            <div style={{ width: leftFixedWidth, flexShrink: 0 }} />
-            {renderRowContent(row, rowIndex, scrollableCols, 'scrollable')}
-            <div style={{ width: rightFixedWidth, flexShrink: 0 }} />
+            <div style={{ width: leftFixedWidth, flexShrink: 0, height: rowHeight }} />
+            {renderRowContent(row, rowIndex, scrollableCols)}
+            <div style={{ width: rightFixedWidth, flexShrink: 0, height: rowHeight }} />
           </div>
         </div>
 
-        <div
-          className="flex"
-          style={{
-            position: 'sticky',
-            right: 0,
-            zIndex: 15,
-            flexShrink: 0,
-            height: '100%',
-            backgroundColor: isSelected ? '#eff6ff' : isStriped ? '#f8fafc' : '#ffffff',
-            boxShadow: '-4px 0 8px -4px rgba(0,0,0,0.1)',
-          }}
-        >
-          {renderRowContent(row, rowIndex, rightFixedCols, 'right')}
-        </div>
+        {rightFixedCols.length > 0 && (
+          <div
+            className="flex"
+            style={{
+              position: 'sticky',
+              right: 0,
+              zIndex: 25,
+              flexShrink: 0,
+              height: rowHeight,
+              backgroundColor: rowBg,
+              boxShadow: '-2px 0 8px -2px rgba(0,0,0,0.08)',
+            }}
+          >
+            {renderRowContent(row, rowIndex, rightFixedCols)}
+          </div>
+        )}
       </div>
     );
   };
@@ -247,6 +269,7 @@ export function TableBody<T extends Record<string, any>>({
         width: '100%',
         height: totalHeight,
         minHeight: '100%',
+        boxSizing: 'border-box',
       }}
     >
       {visibleRowIndices.map(renderRow)}

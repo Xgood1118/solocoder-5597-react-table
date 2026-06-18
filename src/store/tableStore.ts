@@ -271,4 +271,6 @@ export const createTableStore = <T extends Record<string, any>>(initialProps: {
   }));
 };
 
-export type TableStore<T = any> = ReturnType<typeof createTableStore<T>>;
+export type TableStore<T extends Record<string, any> = Record<string, any>> = ReturnType<
+  typeof createTableStore<T>
+>;

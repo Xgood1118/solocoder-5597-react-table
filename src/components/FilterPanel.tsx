@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ColumnDef, FilterCondition, FilterOperator } from '../types/table';
 import { getOperatorsForDataType, operatorLabels } from '../utils/filter';
 
@@ -15,13 +15,17 @@ export function FilterPanel<T extends Record<string, any>>({
   onApply,
   onClose,
 }: FilterPanelProps<T>) {
-  const operators = getOperatorsForDataType(column.dataType);
+  const operators = useMemo(
+    () => getOperatorsForDataType(column.dataType),
+    [column.dataType]
+  );
   const [operator, setOperator] = useState<FilterOperator>(
     currentFilter?.operator ?? operators[0]
   );
   const [value, setValue] = useState<any>(currentFilter?.value ?? '');
   const [value2, setValue2] = useState<any>(currentFilter?.value2 ?? '');
   const panelRef = useRef<HTMLDivElement>(null);
+  const initializedRef = useRef(false);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -34,6 +38,10 @@ export function FilterPanel<T extends Record<string, any>>({
   }, [onClose]);
 
   useEffect(() => {
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      return;
+    }
     setOperator(currentFilter?.operator ?? operators[0]);
     setValue(currentFilter?.value ?? '');
     setValue2(currentFilter?.value2 ?? '');

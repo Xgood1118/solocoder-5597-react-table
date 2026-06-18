@@ -1,5 +1,11 @@
 import { ColumnDef, FilterCondition, FilterOperator } from '../types/table';
-import { isBefore, isAfter, differenceInDays, subDays } from 'date-fns';
+import { isBefore, isAfter } from 'date-fns';
+
+function subDays(date: Date, days: number): Date {
+  const result = new Date(date);
+  result.setDate(result.getDate() - days);
+  return result;
+}
 
 function getValue(row: any, columnId: string): any {
   return row[columnId];

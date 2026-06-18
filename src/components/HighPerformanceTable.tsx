@@ -39,10 +39,10 @@ export function HighPerformanceTable<T extends Record<string, any>>({
   striped = true,
   className = '',
 }: HighPerformanceTableProps<T>) {
-  const storeRef = useRef<TableStore<T> | null>(null);
+  const storeRef = useRef<any>(null);
   if (!storeRef.current) {
-    storeRef.current = createTableStore<T>({
-      columns,
+    storeRef.current = createTableStore<any>({
+      columns: columns as any,
       data,
       rowIdKey,
       pageSize,
@@ -51,7 +51,7 @@ export function HighPerformanceTable<T extends Record<string, any>>({
     });
   }
 
-  const store = storeRef.current!;
+  const store = storeRef.current;
   const state = store();
 
   const [, forceUpdate] = useState(0);
@@ -79,6 +79,22 @@ export function HighPerformanceTable<T extends Record<string, any>>({
     return sorted;
   }, [data, columns, state.filterState, state.sortState]);
 
+  useEffect(() => {
+    const currentTotal = store.getState().pagination.total;
+    if (currentTotal !== processedData.length) {
+      store.setState({
+        pagination: {
+          ...store.getState().pagination,
+          total: processedData.length,
+          loadedCount: Math.min(
+            processedData.length,
+            Math.max(store.getState().pagination.loadedCount, store.getState().pagination.pageSize)
+          ),
+        },
+      });
+    }
+  }, [processedData.length, store]);
+
   const displayedData = useMemo(() => {
     if (state.pagination.mode === 'pagination') {
       return processedData;
@@ -89,12 +105,10 @@ export function HighPerformanceTable<T extends Record<string, any>>({
 
   const paginatedData = useMemo(() => {
     if (state.pagination.mode === 'pagination') {
-      const start = (state.pagination.page - 1) * state.pagination.pageSize;
-      const end = start + state.pagination.pageSize;
-      return processedData.slice(start, end);
+      return processedData;
     }
     return displayedData;
-  }, [processedData, displayedData, state.pagination.mode, state.pagination.page, state.pagination.pageSize]);
+  }, [processedData, displayedData, state.pagination.mode]);
 
   const getRowHeightFn = useCallback(
     (row: T): number => {
@@ -116,25 +130,42 @@ export function HighPerformanceTable<T extends Record<string, any>>({
     getRowHeightFn
   );
 
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const sentinelRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const loadingMoreRef = useRef(false);
+  const scrollModeRef = useRef(state.pagination.mode);
+
+  useEffect(() => {
+    scrollModeRef.current = state.pagination.mode;
+  }, [state.pagination.mode]);
 
   const onScrollHandler = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       vs.onScroll(e);
 
-      if (state.pagination.mode === 'infinite') {
+      if (scrollModeRef.current === 'infinite') {
         const target = e.currentTarget;
         const { scrollTop, scrollHeight, clientHeight } = target;
-        if (scrollTop + clientHeight >= scrollHeight - 100) {
-          if (state.pagination.loadedCount < processedData.length) {
-            store.getState().loadMore(state.pagination.pageSize);
+        if (
+          scrollTop + clientHeight >= scrollHeight - 200 &&
+          !loadingMoreRef.current
+        ) {
+          const st = store.getState();
+          if (st.pagination.loadedCount < st.pagination.total) {
+            loadingMoreRef.current = true;
+            store.getState().loadMore(st.pagination.pageSize);
+            setTimeout(() => {
+              loadingMoreRef.current = false;
+            }, 50);
           }
         }
       }
     },
-    [vs, state.pagination.mode, state.pagination.loadedCount, state.pagination.pageSize, processedData.length, store]
+    [vs, store]
   );
+
+  useEffect(() => {
+    loadingMoreRef.current = false;
+  }, [state.pagination.loadedCount]);
 
   useEffect(() => {
     const handleResizeColumn = (e: any) => {
@@ -152,10 +183,14 @@ export function HighPerformanceTable<T extends Record<string, any>>({
     };
   }, [store]);
 
-  const currentPageIds = useMemo(
-    () => paginatedData.map((row) => row[rowIdKey]),
-    [paginatedData, rowIdKey]
-  );
+  const currentPageIds = useMemo(() => {
+    if (state.pagination.mode === 'pagination') {
+      const start = (state.pagination.page - 1) * state.pagination.pageSize;
+      const end = start + state.pagination.pageSize;
+      return processedData.slice(start, end).map((row) => row[rowIdKey]);
+    }
+    return paginatedData.map((row) => row[rowIdKey]);
+  }, [processedData, paginatedData, rowIdKey, state.pagination.mode, state.pagination.page, state.pagination.pageSize]);
 
   const { allSelected, indeterminate } = useMemo(() => {
     if (currentPageIds.length === 0) return { allSelected: false, indeterminate: false };
@@ -209,11 +244,16 @@ export function HighPerformanceTable<T extends Record<string, any>>({
   const handlePageChange = useCallback(
     (page: number) => {
       store.getState().setPage(page);
-      if (scrollContainerRef.current) {
-        scrollContainerRef.current.scrollTop = 0;
+      if (scrollContainerRef.current && state.pagination.mode === 'pagination') {
+        const startRowIdx = (page - 1) * state.pagination.pageSize;
+        let targetTop = 0;
+        for (let i = 0; i < startRowIdx && i < vs.rowOffsets.length; i++) {
+          targetTop = vs.rowOffsets[i] + (vs.rowHeights[i] ?? estimatedRowHeight);
+        }
+        scrollContainerRef.current.scrollTop = targetTop;
       }
     },
-    [store]
+    [store, state.pagination.mode, state.pagination.pageSize, vs.rowOffsets, vs.rowHeights, estimatedRowHeight]
   );
 
   const handlePageSizeChange = useCallback(
@@ -243,6 +283,15 @@ export function HighPerformanceTable<T extends Record<string, any>>({
 
   const showEmpty = !loading && processedData.length === 0;
   const showSkeleton = loading;
+
+  const currentPageStartIdx =
+    state.pagination.mode === 'pagination'
+      ? (state.pagination.page - 1) * state.pagination.pageSize
+      : 0;
+  const currentPageEndIdx =
+    state.pagination.mode === 'pagination'
+      ? Math.min(processedData.length, state.pagination.page * state.pagination.pageSize)
+      : paginatedData.length;
 
   return (
     <div className={`flex flex-col border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm ${className}`}>
@@ -280,8 +329,14 @@ export function HighPerformanceTable<T extends Record<string, any>>({
               position: 'relative',
             }}
           >
-            <div style={{ position: 'relative', minWidth: '100%' }}>
-              <div style={{ zIndex: 30 }}>
+            <div
+              style={{
+                position: 'relative',
+                minWidth: '100%',
+                width: vs.totalWidth < 1 ? '100%' : vs.totalWidth,
+              }}
+            >
+              <div style={{ position: 'sticky', top: 0, zIndex: 40 }}>
                 <TableHeader<T>
                   columns={columns}
                   columnWidths={state.columnWidths}
@@ -303,8 +358,8 @@ export function HighPerformanceTable<T extends Record<string, any>>({
                 data={paginatedData}
                 columns={columns}
                 columnWidths={state.columnWidths}
-                startRowIndex={vs.startRowIndex}
-                endRowIndex={vs.endRowIndex}
+                startRowIndex={Math.max(0, vs.startRowIndex)}
+                endRowIndex={Math.min(paginatedData.length, vs.endRowIndex)}
                 startColIndex={vs.startColIndex}
                 endColIndex={vs.endColIndex}
                 rowOffsets={vs.rowOffsets}
@@ -322,6 +377,37 @@ export function HighPerformanceTable<T extends Record<string, any>>({
                 measureRowHeight={vs.measureRowHeight}
                 striped={striped}
               />
+
+              {state.pagination.mode === 'infinite' &&
+                state.pagination.loadedCount < state.pagination.total && (
+                  <div
+                    className="w-full flex items-center justify-center py-4 text-sm text-slate-400"
+                    style={{ position: 'absolute', bottom: 0, left: 0 }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg
+                        className="animate-spin w-4 h-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                        />
+                      </svg>
+                      加载更多...
+                    </div>
+                  </div>
+                )}
             </div>
           </div>
 

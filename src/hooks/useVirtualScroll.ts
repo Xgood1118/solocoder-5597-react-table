@@ -7,9 +7,9 @@ const DEFAULT_ROW_HEIGHT = 48;
 const HEADER_HEIGHT = 48;
 
 export interface VirtualScrollResult {
-  containerRef: React.RefObject<HTMLDivElement>;
-  headerRef: React.RefObject<HTMLDivElement>;
-  bodyRef: React.RefObject<HTMLDivElement>;
+  containerRef: React.MutableRefObject<HTMLDivElement | null>;
+  headerRef: React.MutableRefObject<HTMLDivElement | null>;
+  bodyRef: React.MutableRefObject<HTMLDivElement | null>;
   startRowIndex: number;
   endRowIndex: number;
   startColIndex: number;
@@ -49,6 +49,7 @@ export function useVirtualScroll<T>(
     data.map((row) => (getRowHeightFn ? getRowHeightFn(row) : estimatedRowHeight))
   );
   const [rowHeightsVersion, setRowHeightsVersion] = useState(0);
+  const lastDataLenRef = useRef(0);
 
   const measuredHeightsRef = useRef<Map<number, number>>(new Map());
   const sentinelTopRef = useRef<HTMLDivElement>(null);
@@ -56,13 +57,21 @@ export function useVirtualScroll<T>(
   const observerRef = useRef<IntersectionObserver | null>(null);
 
   useEffect(() => {
-    rowHeightsRef.current = data.map((row) => {
-      if (measuredHeightsRef.current.has(row as any)) {
-        return measuredHeightsRef.current.get(row as any)!;
+    if (data.length !== lastDataLenRef.current) {
+      const newHeights: number[] = new Array(data.length);
+      for (let i = 0; i < data.length; i++) {
+        if (measuredHeightsRef.current.has(i)) {
+          newHeights[i] = measuredHeightsRef.current.get(i)!;
+        } else if (i < rowHeightsRef.current.length) {
+          newHeights[i] = rowHeightsRef.current[i];
+        } else {
+          newHeights[i] = getRowHeightFn ? getRowHeightFn(data[i]) : estimatedRowHeight;
+        }
       }
-      return getRowHeightFn ? getRowHeightFn(row) : estimatedRowHeight;
-    });
-    setRowHeightsVersion((v) => v + 1);
+      rowHeightsRef.current = newHeights;
+      lastDataLenRef.current = data.length;
+      setRowHeightsVersion((v) => v + 1);
+    }
   }, [data, estimatedRowHeight, getRowHeightFn]);
 
   const { rowOffsets, totalHeight } = useMemo(() => {
@@ -199,6 +208,7 @@ export function useVirtualScroll<T>(
   );
 
   const setRowHeight = useCallback((index: number, height: number) => {
+    measuredHeightsRef.current.set(index, height);
     if (rowHeightsRef.current[index] !== height) {
       rowHeightsRef.current[index] = height;
       setRowHeightsVersion((v) => v + 1);
@@ -208,9 +218,10 @@ export function useVirtualScroll<T>(
   const measureRowHeight = useCallback(
     (rowIndex: number, element: HTMLDivElement | null) => {
       if (!element) return;
+      if (measuredHeightsRef.current.has(rowIndex)) return;
       const height = element.getBoundingClientRect().height;
-      if (height > 0 && rowHeightsRef.current[rowIndex] !== height) {
-        setRowHeight(rowIndex, height);
+      if (height > 0) {
+        setRowHeight(rowIndex, Math.round(height));
       }
     },
     [setRowHeight]
